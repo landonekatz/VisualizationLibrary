@@ -485,12 +485,6 @@ cumulative_enrollment_goals <- function(analytic, start_date, end_date, particip
   
   df$consent_date <- ymd(df$consent_date)
   
-  most_recent_row <- yyyy_mm %>% slice_tail(n = 1)
-  
-  current_participants <- most_recent_row$cumulative_value
-  
-  most_recent_entry <- most_recent_row$year_month
-  
   yyyy_mm <- df %>% 
     mutate(year_month = as.Date(str_replace(consent_date, '...$', '-01'))) %>% 
     group_by(year_month) %>%
@@ -498,6 +492,12 @@ cumulative_enrollment_goals <- function(analytic, start_date, end_date, particip
     ungroup() %>% 
     arrange(year_month) %>%
     mutate(cumulative_value = cumsum(Total))
+  
+  most_recent_row <- yyyy_mm %>% slice_tail(n = 1)
+  
+  current_participants <- most_recent_row$cumulative_value
+  
+  most_recent_entry <- most_recent_row$year_month
   
   g <- ggplot(yyyy_mm) +
     geom_line(aes(x = year_month, y = cumulative_value), data = yyyy_mm, stat = "identity", group = 1, linewidth = 1) + 
