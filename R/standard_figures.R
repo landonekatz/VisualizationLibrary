@@ -1,36 +1,38 @@
 
 #' DSMB Consort Diagram
 #'
-#' @description This function visualizes the categorical percentages of baseline characteristics sex, age, race, education, and military
+#' @description This function visualizes the categorical percentages of Study Status for any study, similar to the NSAID consort diagram, but with customization endpoints.
 #'
-#' @param analytic This is the analytic data set that must include screened, eligible, 
-#' consented, randomized, enrolled, patient_status_active, censored, refused, late_ineligible, and the meta construct column
-#' @param not_enrolled_other is a meta construct that is NULL by default
-#' @param completed_str is the text for the completed box that defaults to 'Completed 12-month visit'
+#' @param analytic The analytic data set that must include the following columns: screened, eligible, consented, refused, discontinued_pre_randomization,
+#'  randomized, late_ineligible, enrolled, completed, not_completed, not_expected, active, missed_final_followup
+#' @param not_enrolled_other A column in the dataset for cases that are eligible but not enrolled for reasons other than refusal (optional).
+#' @param completed_str A string specifying the label for the completion status box. Defaults to "Completed 12-month visit".
+#' @param late_inelgible defaults to late_ineligble but can be any construct like "adjudicated_discontinued"
+#' @param late_inelgible_str defaults to Late Ineligible but can be any construct like "Adjudicated Discontinued"
 #'
-#' @return nothing
+#' @return An HTML string containing an image tag with the base64-encoded consort diagram in PNG format.
 #' @export
 #'
 #' @examples
 #' \dontrun{
 #' dsmb_consort_diagram()
 #' }
-dsmb_consort_diagram <- function(analytic, not_enrolled_other=NULL, completed_str="Completed 12-month visit"){
+dsmb_consort_diagram <- function(analytic, not_enrolled_other=NULL, completed_str="Completed 12-month visit", late_ineligible="late_ineligible", late_ineligible_str="Late Ineligible", not_expected_adjudicated=FALSE){
   analytic <- analytic %>% 
-    filter(screened == TRUE) 
-  
+  filter(screened == TRUE) 
+  late_ineligible_var <- late_ineligible
   Screened <- sum(analytic$screened, na.rm=TRUE)
   Eligible <- sum(analytic$eligible, na.rm=TRUE)
   Consented <- sum(analytic %>% 
                      filter(eligible) %>% 
                      pull(consented), na.rm=TRUE)
   Refused <- sum(analytic %>% 
-                     filter(eligible) %>% 
-                     pull(refused), na.rm=TRUE)
+                   filter(eligible) %>% 
+                   pull(refused), na.rm=TRUE)
   Disconintued_Pre <- sum(analytic %>% 
-                           filter(eligible) %>% 
-                           filter(consented) %>% 
-                           pull(discontinued_pre_randomization), na.rm=TRUE)
+                            filter(eligible) %>% 
+                            filter(consented) %>% 
+                            pull(discontinued_pre_randomization), na.rm=TRUE)
   Randomized <- sum(analytic %>% 
                       filter(eligible) %>% 
                       filter(consented) %>% 
@@ -38,36 +40,12 @@ dsmb_consort_diagram <- function(analytic, not_enrolled_other=NULL, completed_st
   Late_Ineligible <- sum(analytic %>% 
                            filter(eligible) %>% 
                            filter(consented) %>% 
-                           pull(late_ineligible), na.rm=TRUE)
+                           pull(late_ineligible_var), na.rm=TRUE)
   Enrolled <- sum(analytic %>% 
                     filter(eligible) %>% 
                     filter(consented) %>% 
                     filter(randomized) %>% 
                     pull(enrolled), na.rm=TRUE)
-  Active <- sum(analytic %>% 
-                  filter(eligible) %>% 
-                  filter(consented) %>% 
-                  filter(randomized) %>% 
-                  filter(enrolled) %>% 
-                  pull(patient_status_active), na.rm=TRUE)
-  Censored <- sum(analytic %>% 
-                        filter(eligible) %>% 
-                        filter(consented) %>% 
-                        filter(randomized) %>%
-                        filter(enrolled) %>% 
-                        pull(censored), na.rm=TRUE)
-  not_active <- sum(analytic %>% 
-                   filter(eligible) %>% 
-                   filter(consented) %>% 
-                   filter(randomized) %>%
-                   filter(enrolled) %>% 
-                   pull(not_active), na.rm=TRUE)
-  Completed <- sum(analytic %>% 
-                        filter(eligible) %>% 
-                        filter(consented) %>% 
-                        filter(randomized)  %>% 
-                        filter(enrolled) %>% 
-                        pull(completed), na.rm=TRUE)
   Ineligible <- Screened - Eligible
   if(is.null(not_enrolled_other)){
     Not_Enrolled_Other <- Eligible - Consented - Refused
@@ -77,6 +55,23 @@ dsmb_consort_diagram <- function(analytic, not_enrolled_other=NULL, completed_st
     Not_Enrolled_Other <- sum(temp[[not_enrolled_other]], na.rm=TRUE)
   }
   
+  en_df <- analytic %>% 
+    filter(eligible) %>% 
+    filter(consented) %>% 
+    filter(randomized) %>%
+    filter(enrolled)
+  
+  complete <- sum(en_df$completed, na.rm = TRUE)
+  not_complete <- sum(en_df$not_completed, na.rm = TRUE)
+  missed <- sum(en_df$missed_final_followup, na.rm = TRUE)
+  active <- sum(en_df$active, na.rm = TRUE)
+  not_expected <- sum(en_df$not_expected, na.rm = TRUE)
+  if(not_expected_adjudicated){
+    not_expected_str= "Adjudicated Not Expected"
+  } else{
+    not_expected_str= "Not Expected"
+  }
+  
   consort_diagram <- grViz(paste0('
     digraph g {
       graph [layout=fdp, overlap = true, fontsize=1, splines=polyline]
@@ -84,22 +79,22 @@ dsmb_consort_diagram <- function(analytic, not_enrolled_other=NULL, completed_st
       start [style="rounded,filled", fillcolor="#ccccff", pos="6,12!", shape = box, width=2.4, height=1, label = "Screened (n=',Screened,')"];
       elig [style="rounded,filled", fillcolor="#ccccff", pos="6,10!", shape = box, width=2.4, height=1, label = "Eligible (n=',Eligible,')"];
       cons [style="rounded,filled", fillcolor="#ccccff", pos="6,8!", shape = box, width=2.4, height=1, label = "Consented (n=',Consented,')"];
-      pre_rand [style="rounded,filled", fillcolor="#ccccff", pos="10,8!", shape = box, width=2.4, height=1, label = "Discontinued\nPre-Randomization\n(n=',Disconintued_Pre,')"];
+      pre_rand [style="rounded,filled", fillcolor="#ccccff", pos="10,8!", shape = box, width=2.4, height=1, label = "Discontinued (n=',Disconintued_Pre,')"];
 
       rand [style="rounded,filled", fillcolor="#ccccff", pos="6,6!", shape = box, width=2.4, height=1, label = "Randomized (n=',Randomized,')"];
-      late_inelig [style="rounded,filled", fillcolor="#ccccff", pos="10,6!", shape = box, width=2.4, height=1, label = "Late Ineligible (n=',Late_Ineligible,')"];
+      late_inelig [style="rounded,filled", fillcolor="#ccccff", pos="10,6!", shape = box, width=2.4, height=1, label = "',late_ineligible_str,', (n=',Late_Ineligible,')"];
       
       enrolled [style="rounded,filled", fillcolor="#ccccff", pos="6,4!", shape = box, width=2.4, height=1, label = "Enrolled (n=',Enrolled,')"];
-      censored [style="rounded,filled", fillcolor="#ccccff", pos="8,1!", shape = box, width=2.4, height=1, label = "Censored (n=',Censored,')"];
-
-      active [style="rounded,filled", fillcolor="#ccccff", pos="0,1!", shape = box, width=2.4, height=1, label = "Active (n=',Active,')"];
-      compl [style="rounded,filled", fillcolor="#ccccff", pos="12,1!", shape = box, width=2.4, height=1, label = "',completed_str,' (n=',Completed,')"];
       
       ineligible [style="rounded,filled", fillcolor="#ccccff", pos="10,12!", shape = box, width=2.4, height=1, label = "Ineligible (n=',Ineligible,')"];
       refused [style="rounded,filled", fillcolor="#ccccff", pos="10,10!", shape = box, width=2.4, height=1, label = "Refused (n=',Refused,')"];
       
       not_enrolled [style="rounded,filled", fillcolor="#ccccff", pos="2,10!", shape = box, width=2.4, height=1, label = "Not Enrolled Other (n=',Not_Enrolled_Other,')"];
-      not_active [style="rounded,filled", fillcolor="#ccccff", pos="4,1!", shape = box, width=2.4, height=1, label = "Not Active (n=',not_active,')"];
+
+      active [style="rounded,filled", fillcolor="#ccccff", pos="0,0!", shape = box, width=2.4, height=1, label = "Active (n=',active,')"];
+      not_complete [style="rounded,filled", fillcolor="#ccccff", pos="4,0!", shape = box, width=2.4, height=1, label = "Not Completed (n=',not_complete,')\nMissed (n=',missed,')"];
+      not_expected [style="rounded,filled", fillcolor="#ccccff", pos="8,0!", shape = box, width=2.4, height=1, label = "',not_expected_str,' (n=',not_expected,')"];
+      fu_complete [style="rounded,filled", fillcolor="#ccccff", pos="12,0!", shape = box, width=2.4, height=1, label = "',completed_str,' (n=',complete,')"];
       
       # Relationships
       start -> elig
@@ -112,9 +107,9 @@ dsmb_consort_diagram <- function(analytic, not_enrolled_other=NULL, completed_st
       rand -> enrolled
       rand -> late_inelig
       enrolled -> active
-      enrolled -> censored
-      enrolled -> compl
-      enrolled -> not_active
+      enrolled -> not_complete
+      enrolled -> not_expected
+      enrolled -> fu_complete
       
     }
   '))
@@ -136,7 +131,10 @@ dsmb_consort_diagram <- function(analytic, not_enrolled_other=NULL, completed_st
 #' for the NSAID study
 #'
 #' @param analytic This is the analytic data set that must include screened, eligible, 
-#' consented, not_consented, randomized, enrolled, censored, refused, df_surg_completed, and the meta construct column
+#' consented, not_consented, randomized, enrolled, refused, df_surg_completed, completed, not_completed, not_expected, active
+#' @param final_period Defaults to 12 Month
+#' @param definitive_event Event either DF or DWC
+#' @param not_expected_adjudicated whether to note that the Not Expected was adjudicated
 #'
 #' @return nothing
 #' @export
@@ -145,7 +143,7 @@ dsmb_consort_diagram <- function(analytic, not_enrolled_other=NULL, completed_st
 #' \dontrun{
 #' dsmb_nsaid_consort_diagram()
 #' }
-dsmb_nsaid_consort_diagram <- function(analytic){
+dsmb_nsaid_consort_diagram <- function(analytic, final_period="12 Month", not_expected_adjudicated=TRUE){
   analytic <- analytic %>% 
     filter(screened == TRUE) 
   
@@ -188,7 +186,23 @@ dsmb_nsaid_consort_diagram <- function(analytic){
                         filter(enrolled) %>% 
                         pull(df_surg_completed), na.rm=TRUE)
   
-
+  fu_df <- analytic %>% 
+    filter(eligible) %>% 
+    filter(consented) %>% 
+    filter(randomized) %>%
+    filter(enrolled) %>% 
+    filter(df_surg_completed)
+  
+  complete <- sum(fu_df$completed, na.rm = TRUE)
+  not_complete <- sum(fu_df$not_completed, na.rm = TRUE)
+  missed <- sum(fu_df$missed_final_followup, na.rm = TRUE)
+  active <- sum(fu_df$active, na.rm = TRUE)
+  not_expected <- sum(fu_df$not_expected, na.rm = TRUE)
+  if(not_expected_adjudicated){
+    not_expected_str= "Adjudicated Not Expected"
+  } else{
+    not_expected_str= "Not Expected"
+  }
   
   NSAID_consort_diagram <- grViz(paste0('
     digraph g {
@@ -207,8 +221,12 @@ dsmb_nsaid_consort_diagram <- function(analytic){
       enrolled [style="rounded,filled", fillcolor="#ccccff", pos="6,4!", shape = box, width=2.4, height=1, label = "Eligible and Enrolled (n=',Enrolled,')"];
       discon [style="rounded,filled", fillcolor="#ccccff", pos="10,6!", shape = box, width=2.4, height=1, label = "Adjudicated Discontinued (n=',Adjudicated_Discontinuation,')"];
 
-      compl [style="rounded,filled", fillcolor="#ccccff", pos="6,1!", shape = box, width=2.4, height=1, label = "Definitive Fixation Complete (n=',Definitive_Fixation_Complete,')"];
+      compl [style="rounded,filled", fillcolor="#ccccff", pos="6,2!", shape = box, width=2.4, height=1, label = "Definitive Fixation Complete (n=',Definitive_Fixation_Complete,')"];
       
+      active [style="rounded,filled", fillcolor="#ccccff", pos="0,0!", shape = box, width=2.4, height=1, label = "Active (n=',active,')"];
+      not_complete [style="rounded,filled", fillcolor="#ccccff", pos="4,0!", shape = box, width=2.4, height=1, label = "Not Completed (n=',not_complete,')\nMissed (n=',missed,')"];
+      not_expected [style="rounded,filled", fillcolor="#ccccff", pos="8,0!", shape = box, width=2.4, height=1, label = "',not_expected_str,' (n=',not_expected,')"];
+      fu_complete [style="rounded,filled", fillcolor="#ccccff", pos="12,0!", shape = box, width=2.4, height=1, label = "',final_period,' Follow-Up Complete (n=',complete,')"];
       
       # Relationships
       screened -> eligible
@@ -219,6 +237,10 @@ dsmb_nsaid_consort_diagram <- function(analytic){
       eligible -> refused
       rand -> enrolled
       enrolled -> compl
+      compl -> active
+      compl -> not_complete
+      compl -> not_expected
+      compl -> fu_complete
       
     }
   '))
@@ -393,15 +415,21 @@ enrollment_by_injury_and_site <- function(analytic){
 #' \dontrun{
 #' enrollment_by_site()
 #' }
-enrollment_by_site <- function(analytic){
+enrollment_by_site <- function(analytic, number_order = FALSE){
   
   df <- analytic %>%  select(study_id, enrolled, facilitycode, consent_date) %>% 
     filter(enrolled = TRUE) %>% 
     filter(!is.na(consent_date)) %>% 
     group_by(facilitycode) %>%
-    summarise(EnrolledPatients = n()) 
+    summarise(EnrolledPatients = n()) %>%
+    arrange(facilitycode)
   
-  g <- ggplot(df, aes(x = facilitycode, y = EnrolledPatients)) +
+  if (number_order) {
+    df <- df %>%
+      arrange(desc(EnrolledPatients))
+  }
+  
+  g <- ggplot(df, aes(x = factor(facilitycode,  levels = facilitycode), y = EnrolledPatients)) +
     geom_bar(stat = "identity", fill = 'blue3', color = 'black', size = 0.5, width = 0.8) +
     labs(title = "Number of patients enrolled by site", x = "Site", y = "Number enrolled") +
     theme_minimal() +
@@ -431,7 +459,7 @@ enrollment_by_site <- function(analytic){
 #' \dontrun{
 #' cumulative_enrolled()
 #' }
-cumulative_enrolled <- function(analytic){
+cumulative_enrolled <- function(analytic, add_discrete=TRUE){
   
   df <- analytic %>%  select(study_id, enrolled, consent_date) %>% 
     filter(!is.na(consent_date)) %>% 
@@ -448,10 +476,62 @@ cumulative_enrolled <- function(analytic){
     mutate(cumulative_value = cumsum(Total))
   
   
+  if(add_discrete){
+    g <- ggplot(yyyy_mm) +
+      geom_bar(aes(x = factor(year_month), y = Total, group = 1), stat = "identity", fill = "blue3", color = "black", size = 0.3) +
+      geom_line(aes(x = factor(year_month), y = cumulative_value), data = yyyy_mm, stat = "identity", group = 1) +  # Add the 'data' argument
+      labs(title = "Cumulative Enrollment with Discrete Enrollment by Month", x = "Month", y = "Enrolled") +
+      theme_minimal() +
+      theme(axis.text.x = element_text(angle = 90, vjust = 0.5))
+  } else{
+    g <- ggplot(yyyy_mm) +
+      geom_line(aes(x = factor(year_month), y = cumulative_value), data = yyyy_mm, stat = "identity", group = 1) +  # Add the 'data' argument
+      labs(title = "Cumulative Enrollment by Month", x = "Month", y = "Enrolled") +
+      theme_minimal() +
+      theme(axis.text.x = element_text(angle = 90, vjust = 0.5))
+  }
+
+  temp_png_path <- tempfile(fileext = ".png")
+  ggsave(temp_png_path, plot = g, width = 2500, height = 1000, units = 'px')
+  image_data <- base64enc::base64encode(temp_png_path)
+  img_tag <- sprintf('<img src="data:image/png;base64,%s" alt="Cumulative Enrollment with Discrete Enrollment by Month" style="max-width: 100%%; width: 80%%;">', image_data)
+  file.remove(temp_png_path)
+  
+  return(img_tag)
+}
+
+#' Monthly Discrete Enrollment
+#'
+#' @description This function visualizes the discrete number of patients enrolled by month
+#'
+#' @param analytic This is the analytic data set that must include study_id, enrolled, consent_date 
+#'
+#' @return nothing
+#' @export
+#'
+#' @examples
+#' \dontrun{
+#' discrete_enrolled()
+#' }
+discrete_enrolled <- function(analytic){
+  
+  df <- analytic %>%  select(study_id, enrolled, consent_date) %>% 
+    filter(!is.na(consent_date)) %>% 
+    filter(enrolled == TRUE) 
+  
+  df$consent_date <- ymd(df$consent_date)
+  
+  yyyy_mm <- df %>% 
+    mutate(year_month = str_remove(consent_date, '...$')) %>% 
+    group_by(year_month) %>%
+    summarise(Total = n()) %>%
+    ungroup() %>% 
+    arrange(year_month) %>%
+    mutate(cumulative_value = cumsum(Total))
+  
   g <- ggplot(yyyy_mm) +
     geom_bar(aes(x = factor(year_month), y = Total, group = 1), stat = "identity", fill = "blue3", color = "black", size = 0.3) +
-    geom_line(aes(x = factor(year_month), y = cumulative_value), data = yyyy_mm, stat = "identity", group = 1) +  # Add the 'data' argument
-    labs(title = "Cumulative Enrollment with Discrete Enrollment by Month", x = "Month", y = "Enrolled") +
+    labs(title = "Discrete Enrollment by Month", x = "Month", y = "Enrolled") +
     theme_minimal() +
     theme(axis.text.x = element_text(angle = 90, vjust = 0.5))
   
@@ -463,6 +543,7 @@ cumulative_enrolled <- function(analytic){
   
   return(img_tag)
 }
+
 
 
 #' Cumulative enrollment for Length of Stay for NSAID
@@ -501,7 +582,7 @@ cumulative_enrolled_los <- function(analytic){
     scale_x_discrete(limits = count_data$ih_los_days)
   
   temp_png_path <- tempfile(fileext = ".png")
-  ggsave(temp_png_path, plot = g, width = 2100, height = 1000, units = 'px')
+  ggsave(temp_png_path, plot = g, width = 2500, height = 1000, units = 'px')
   image_data <- base64enc::base64encode(temp_png_path)
   img_tag <- sprintf('<img src="data:image/png;base64,%s" alt="Cumulative Enrollment with Discrete Enrollment by Month" style="max-width: 100%%; width: 80%%;">', image_data)
   file.remove(temp_png_path)
@@ -576,9 +657,12 @@ cumulative_enrollment_goals <- function(analytic, start_date, end_date, particip
 #'
 #' @description This function visualizes the categorical percentages of study status as well as followup completions
 #'
-#' @param analytic This is the analytic data set that must include study_id, screened, ineligible, eligible, refused, consented, randomized, enrolled, time_zero, 
-#' adjudicated_early_discontinued, followup_complete_12mo, safety_set
+#' @param analytic This is the analytic data set that must include study_id, screened, ineligible, eligible,
+#' refused, consented, randomized, enrolled, time_zero, adjudicated_discontinued, completed, 
+#' safety_set, exclusive_safety_set, not_completed, not_expected, active, missed_final_followup
+#' @param final_period Defaults to 12 Month
 #' @param definitive_event Event either DF or DWC
+#' @param not_expected_adjudicated whether to note that the Not Expected was adjudicated
 #'
 #' @return nothing
 #' @export
@@ -587,11 +671,11 @@ cumulative_enrollment_goals <- function(analytic, start_date, end_date, particip
 #' \dontrun{
 #' consort_diagram()
 #' }
-consort_diagram <- function(analytic, definitive_event = "Definitive Fixation Complete"){
+consort_diagram <- function(analytic, final_period="12 Month", definitive_event = "Definitive Fixation Complete" , not_expected_adjudicated=TRUE){
   
   df <- analytic %>% 
     select(study_id, screened, ineligible, eligible, refused, consented, randomized, enrolled, time_zero, 
-           adjudicated_early_discontinued, followup_complete_12mo, safety_set) %>% 
+           adjudicated_discontinued, completed, safety_set, exclusive_safety_set, not_completed, not_expected, active, missed_final_followup) %>% 
     mutate(time_zero = ifelse(!is.na(time_zero), TRUE, FALSE))
   
   screened <- sum(analytic$screened, na.rm = TRUE)
@@ -599,46 +683,60 @@ consort_diagram <- function(analytic, definitive_event = "Definitive Fixation Co
   eligible_df <- df %>% 
     filter(screened)
   
-  safety <- sum(eligible_df$safety_set, na.rm = TRUE)
+  safety <- sum(df$safety_set, na.rm = TRUE)
+  ex_safety <- sum(df$exclusive_safety_set, na.rm = TRUE)
   
   eligible <- sum(eligible_df$eligible, na.rm = TRUE)
   
-  ineligible <- screened - eligible
+  ineligible <- sum(eligible_df$ineligible, na.rm = TRUE)
   
-  refused_df <- eligible_df %>% 
+  eligble_df <- eligible_df %>% 
     filter(eligible)
   
-  refused <- sum(refused_df$refused, na.rm = TRUE)
+  refused <- sum(eligble_df$refused, na.rm = TRUE)
   
-  consented_df <- refused_df %>% 
+  not_refused_df <- eligble_df %>% 
     filter(refused == FALSE | is.na(refused))
   
-  consented <- sum(consented_df$consented, na.rm = TRUE)
+  consented <- sum(not_refused_df$consented, na.rm = TRUE)
+  
+  # First identity (no construct used for not consented)
   not_consented <- eligible - (consented + refused)
   
-  randomized_df <- consented_df %>% 
+  consented_df <- eligible_df %>% 
     filter(consented)
   
-  randomized <- sum(randomized_df$randomized, na.rm = TRUE)
+  randomized <- sum(consented_df$randomized, na.rm = TRUE)
   
-  ed_df <- randomized_df %>% 
+  not_randomized_df <- consented_df %>% 
+    filter(!randomized | is.na(randomized))
+  
+  ed_consented <- sum(not_randomized_df$adjudicated_discontinued, na.rm = TRUE)
+  
+  randomized_df <- consented_df %>% 
     filter(randomized)
   
-  early_discontinuation <- sum(ed_df$adjudicated_early_discontinued, na.rm = TRUE)
+  ed_randomized <- sum(randomized_df$adjudicated_discontinued, na.rm = TRUE)
   
-  enrolled_df <- ed_df %>% 
-    filter(adjudicated_early_discontinued == FALSE | is.na(adjudicated_early_discontinued))
+  enrolled_df <- randomized_df %>% 
+    filter(enrolled)
   
   enrolled <- sum(enrolled_df$enrolled, na.rm = TRUE)
-  df_complete <- sum(enrolled_df$time_zero, na.rm = TRUE)
-  
-  ed_consented <- consented - randomized
-  ed_randomized <- randomized - enrolled
+  df_complete <- sum(!is.na(enrolled_df$time_zero), na.rm = TRUE)
   
   fu_df <- enrolled_df %>% 
-    filter(time_zero)
+    filter(!is.na(time_zero))
   
-  fu_complete_12mo <- sum(fu_df$followup_complete_12mo, na.rm = TRUE)
+  complete <- sum(fu_df$completed, na.rm = TRUE)
+  not_complete <- sum(fu_df$not_completed, na.rm = TRUE)
+  missed <- sum(fu_df$missed_final_followup, na.rm = TRUE)
+  active <- sum(fu_df$active, na.rm = TRUE)
+  not_expected <- sum(fu_df$not_expected, na.rm = TRUE)
+  if(not_expected_adjudicated){
+    not_expected_str= "Adjudicated Not Expected"
+  } else{
+    not_expected_str= "Not Expected"
+  }
   
   consort_diagram <- grViz(paste0('
     digraph g {
@@ -658,13 +756,16 @@ consort_diagram <- function(analytic, definitive_event = "Definitive Fixation Co
       
       ed_randomized [style="rounded,filled", fillcolor="#a4d3ee", pos="10,6!", shape = box, width=2.4, height=1, label = "Adjudicated Discontinued (Randomized) (n=',ed_randomized,')"];
       
+      safety [style="rounded,filled", fillcolor="#a4d3ee", pos="2,6!", shape = box, width=2.4, height=1, label = "Full Safety Set (n=',safety,')\nSafety Set & Not Enrolled (n=',ex_safety,')"];
+      
       enrolled [style="rounded,filled", fillcolor="#a4d3ee", pos="6,4!", shape = box, width=2.4, height=1, label = "Eligible and Enrolled (n=',enrolled,')"];
       df_complete [style="rounded,filled", fillcolor="#a4d3ee", pos="6,2!", shape = box, width=2.4, height=1, label = "',definitive_event,' (n=',df_complete,')"];
 
-      fu_complete [style="rounded,filled", fillcolor="#a4d3ee", pos="6,0!", shape = box, width=2.4, height=1, label = "12 Month Follow-Up Complete (n=',fu_complete_12mo,')"];
-      
-      safety [style="rounded,filled", fillcolor="#a4d3ee", pos="10,2!", shape = box, width=2.4, height=1, label = "Safety Set (n=',safety,')"];
-      
+      active [style="rounded,filled", fillcolor="#a4d3ee", pos="0,0!", shape = box, width=2.4, height=1, label = "Active (n=',active,')"];
+      not_complete [style="rounded,filled", fillcolor="#a4d3ee", pos="4,0!", shape = box, width=2.4, height=1, label = "Not Completed (n=',not_complete,')\nMissed (n=',missed,')"];
+      not_expected [style="rounded,filled", fillcolor="#a4d3ee", pos="8,0!", shape = box, width=2.4, height=1, label = "',not_expected_str,' (n=',not_expected,')"];
+      fu_complete [style="rounded,filled", fillcolor="#a4d3ee", pos="12,0!", shape = box, width=2.4, height=1, label = "',final_period,' Follow-Up Complete (n=',complete,')"];
+
       # Relationships
       screened -> eligible
       screened -> ineligible
@@ -675,9 +776,10 @@ consort_diagram <- function(analytic, definitive_event = "Definitive Fixation Co
       randomized -> enrolled
       randomized -> ed_randomized
       enrolled -> df_complete
+      df_complete -> active
+      df_complete -> not_complete
+      df_complete -> not_expected
       df_complete -> fu_complete
-      df_complete -> safety
-      
     }
   '))
   svg_content <- DiagrammeRsvg::export_svg(consort_diagram)
@@ -690,3 +792,205 @@ consort_diagram <- function(analytic, definitive_event = "Definitive Fixation Co
   file.remove(c(temp_svg_path, temp_png_path))
   return(img_tag)
 }
+
+
+
+#' Visualization Library: Issues per site (Basic)
+#'
+#' @description Visualizes the number of open and untouched issues per site,
+#' determined by the status column in the query_database being set to "Deteected".
+#'
+#'
+#' @return table of data quality confirmation forms
+#' @export
+#'
+#' @examples
+#' \dontrun{
+#' vislib_query_issues_per_site_basic()
+#' }
+vislib_query_issues_per_site_basic <- function(analytic) {
+  
+  queries <- analytic %>%
+    select(analytic_query_database) %>%
+    separate_rows(analytic_query_database, sep = 'NEWROW:') %>%
+    separate(analytic_query_database, into = c("ID", "facilitycode", "construct", "Message", "ADDRESS", 
+                                               "Field", "Value", "updated_value", "status", "detected_date", 
+                                               "changed_date", "recent", "modified_date", "confirmed_date", 
+                                               "confirmed_modified_date", "closed_date", "warning", "note"),
+             sep = 'NEWCOLUMN:') %>%
+    filter(!is.na(status) & status != 'NA')
+  
+  if (nrow(queries)==0){
+    return("No Queries in Database.")
+  }
+  
+  queries<- queries %>% 
+    mutate(status = recode(status,
+                               "Closed" = "Resolved Issue",
+                               "Updated Form Value Unchanged" = "Open Issue",
+                               "Dashboard Changed" = "Open Issue",
+                               "Follow-up Requested" = "Open Issue",
+                               "Changed & Confirmed" = "Resolved Issue",
+                               "Confirmed" = "Resolved Issue",
+                               "Changed" = "Resolved Issue",
+                               "Detected" = "Open Issue",
+                               "Indicated Data Change" = "Open Issue",
+                               "Update Form & Indicated Data Change" = "Open Issue")) %>% 
+    group_by(facilitycode) %>% 
+    summarise(open = sum(status=="Open Issue"), closed=sum(status=="Resolved Issue")) %>%
+    ungroup() %>% 
+    arrange(desc(open))
+  
+  queries_long <- queries %>%
+    pivot_longer(cols = c(open, closed), names_to = "status", values_to = "count")
+  
+  # Update the ggplot to use the long format data
+  g <- ggplot(queries_long, aes(x = factor(facilitycode, levels=queries$facilitycode), y = count, fill = status)) +
+    geom_bar(stat = "identity", position = "stack", color = 'black', size = 0.5, width = 0.8) +
+    scale_fill_manual(values = c("open" = "red", "closed" = "blue3"),
+                      labels = c("open" = "Open Issue", "closed" = "Resolved Issue")) +
+    labs(title = "Number of Issues by Facility",
+         x = "Site",
+         y = "Issue Count") +
+    theme_minimal() +
+    theme(axis.text.x = element_text(angle = 45, hjust = 1),
+          legend.position = "top",  # Center the legend at the top
+          legend.title = element_blank())
+  
+  temp_png_path <- tempfile(fileext = ".png")
+  ggsave(temp_png_path, plot = g, width = 2500, height = 1000, units = 'px')
+  image_data <- base64enc::base64encode(temp_png_path)
+  img_tag <- sprintf('<img src="data:image/png;base64,%s" alt="Enrollment by site" style="max-width: 100%%; width: 80%%;">', image_data)
+  
+  return(img_tag)
+}
+
+
+#' Visualization Library: Issues per site
+#'
+#' @description Visualizes the number of open and untouched issues per site,
+#' determined by the status column in the query_database being set to "Deteected".
+#'
+#'
+#' @return table of data quality confirmation forms
+#' @export
+#'
+#' @examples
+#' \dontrun{
+#' vislib_query_issues_per_site()
+#' }
+vislib_query_issues_per_site <- function(analytic) {
+  
+  queries_full <- analytic %>%
+    select(analytic_query_database) %>%
+    separate_rows(analytic_query_database, sep = 'NEWROW:') %>%
+    separate(analytic_query_database, into = c("ID", "facilitycode", "construct", "Message", "ADDRESS", 
+                                               "Field", "Value", "updated_value", "status", "detected_date", 
+                                               "changed_date", "recent", "modified_date", "confirmed_date", 
+                                               "confirmed_modified_date", "closed_date", "warning", "note"),
+             sep = 'NEWCOLUMN:') %>%
+    filter(!is.na(status) & status != 'NA')
+  
+  weeks <- 2
+  
+  if (nrow(queries_full)==0){
+    return("No Queries in Database.")
+  }
+  
+  queries_full['recent'] <- as.logical(queries_full$recent)
+  queries_full['ID'] <- as.character(queries_full$ID)
+  
+  fixed <- Sys.Date()
+  today <- fixed
+  indexes <- seq(1, weeks)
+  t_cols <- c("Detected","Changed","Confirmed","Changed & Confirmed","Follow-up Requested","Dashboard Changed","Updated Form Value Unchanged","Closed","Indicated Data Change", "Update Form & Indicated Data Change")
+  
+  for (i in indexes){
+    start <- Sys.time()
+    queries <- queries_full
+    
+    queries['closed_fixed'] <- replace_na(as.Date(queries$closed_date, "%m/%d/%Y") <= fixed,FALSE)
+    queries['changed_fixed'] <- replace_na(as.Date(queries$changed_date, "%m/%d/%Y") <= fixed,FALSE)
+    queries['confirmed_fixed'] <- replace_na(as.Date(queries$confirmed_date, "%m/%d/%Y") <= fixed,FALSE)
+    queries['detected_fixed'] <- replace_na(as.Date(queries$detected_date, "%m/%d/%Y") <= fixed,FALSE)
+    
+    queries['closed_dated'] <- as.Date(ifelse(queries$closed_fixed, queries$closed_date, NA), "%m/%d/%Y")
+    queries['changed_dated'] <- as.Date(ifelse(queries$changed_fixed, queries$changed_date, NA), "%m/%d/%Y")
+    queries['confirmed_dated'] <- as.Date(ifelse(queries$confirmed_fixed, queries$confirmed_date, NA), "%m/%d/%Y")
+    queries['detected_dated'] <- as.Date(ifelse(queries$detected_fixed, queries$detected_date, NA), "%m/%d/%Y")
+    
+    queries <- queries %>% rowwise() %>%
+      mutate(max_date= max(na.omit(c(detected_dated, changed_dated, confirmed_dated, changed_dated, closed_dated))))
+    
+    changed_confirmed <- c("Changed", "Confirmed")
+    
+    queries <- queries %>%
+      mutate(status= NA) %>%
+      mutate(status= ifelse(replace_na(detected_dated==max_date,FALSE), "Detected", status)) %>%
+      mutate(status= ifelse(replace_na(changed_dated==max_date,FALSE), "Changed", status)) %>%
+      mutate(status= ifelse(replace_na(confirmed_dated==max_date,FALSE), "Confirmed", status)) %>%
+      mutate(status= ifelse(is.na(status)==FALSE & is.na(confirmed_dated)==FALSE & is.na(changed_dated)==FALSE & status %in% changed_confirmed,"Changed & Confirmed", status)) %>%
+      mutate(status= ifelse(replace_na(closed_dated==max_date,FALSE), "Closed", status))
+    
+    queries <- queries %>%
+      mutate(recent= replace_na(recent,FALSE)) %>%
+      mutate(warning= ifelse(is.na(changed_date),NA, ifelse(as.Date(changed_date, "%m/%d/%Y") > as.Date(detected_date, "%m/%d/%Y"), ifelse(recent==TRUE, "WARNING: None Modified after Changed", NA), "WARNING: Detected after Changed"))) %>%
+      select(colnames(queries))
+    
+    queries_count <- queries %>% group_by(facilitycode) %>% count(status)
+    
+    processed_data <- tibble('facilitycode'=unique(queries$facilitycode))
+    
+    for(new_col in t_cols){
+      counts <- queries_count %>% filter(status==new_col)
+      processed_data <- processed_data %>% rowwise() %>% mutate(!!new_col := ifelse(length(counts[counts$facilitycode==facilitycode,]$n)==0,0,counts[counts$facilitycode==facilitycode,]$n))
+    }
+    processed_data <- processed_data %>% rename(Site=facilitycode) %>% mutate(Site = paste(Site,format(fixed,"%b-%d"),sep=", "))
+    
+    if (i==1){
+      processed_data_full <- processed_data
+    } else{
+      processed_data_full <- rbind(processed_data, processed_data_full)
+    }
+    fixed <- fixed - 7
+  }
+  
+  
+  
+  fixed_names <- list("Closed"="MCC Closed Issue:\nClosed", "Updated Form Value Unchanged"="Open Issue:\nUpdated Form\nValue Unchanged", "Dashboard Changed"="Open Issue:\nDashboard Changed",
+                      "Follow-up Requested"="Open Issue:\nFollow-up Requested", "Changed & Confirmed"="Site Addressed Issue:\nChanged & Confirmed", "Confirmed"="Site Addressed Issue:\nConfirmed",
+                      "Changed"="Site Addressed Issue:\nChanged", "Detected"="Open Issue:\nUntouched", "Indicated Data Change"="Open Issue:\nIndicated Data Change",
+                      "Update Form & Indicated Data Change"="Open Issue:\nUpdate Form &\nIndicated Data Change")
+  
+  sort_sites <- TRUE
+  
+  if(sort_sites==TRUE){
+    sites_ordered <- processed_data_full %>% ungroup() %>% arrange(desc(Detected), Closed, Changed)
+    sites_sorted <- str_sub(sites_ordered[str_detect(sites_ordered$Site,format(today,"%b-%d")),]$Site,end=3)
+    dates_suffix <- rep(c(format(today-7,"%b-%d"),format(today,"%b-%d")),length(sites_sorted))
+    site_order <- paste(rep(sites_sorted,each=2),dates_suffix,sep=", ")
+    processed_data_full <- processed_data_full[match(site_order, processed_data_full$Site),]
+  }
+  
+  p <- plotly::plot_ly(data = processed_data_full, x=~Site, y=~Detected, type = 'bar', name = unname(unlist(fixed_names['Detected']))) %>%
+    add_trace(y = ~Changed, name = unname(unlist(fixed_names['Changed'])), marker = list(color = '#ff9933')) %>%
+    add_trace(y = ~Confirmed, name = unname(unlist(fixed_names['Confirmed'])), marker = list(color = '#669933')) %>%
+    add_trace(y = ~`Changed & Confirmed`, name = unname(unlist(fixed_names['Changed & Confirmed'])), marker = list(color = '#cc3333')) %>%
+    add_trace(y = ~`Follow-up Requested`, name = unname(unlist(fixed_names['Follow-up Requested'])), marker = list(color = '#9966cc')) %>%
+    add_trace(y = ~`Dashboard Changed`, name = unname(unlist(fixed_names['Dashboard Changed'])), marker = list(color = '#996666')) %>%
+    add_trace(y = ~`Updated Form Value Unchanged`, name = unname(unlist(fixed_names['Updated Form Value Unchanged'])), marker = list(color = '#cc66cc')) %>%
+    add_trace(y = ~`Indicated Data Change`, name = unname(unlist(fixed_names['Indicated Data Change'])), marker = list(color = '#cc66a0')) %>%
+    add_trace(y = ~Closed, name = unname(unlist(fixed_names['Closed'])), marker = list(color = '#666666')) %>%
+    add_trace(y = ~`Update Form & Indicated Data Change`, name = unname(unlist(fixed_names['Update Form & Indicated Data Change'])), marker = list(color = '#f0e690')) %>%
+    plotly::layout(xaxis = list(title = "",categoryorder = "array", categoryarray = ~Site), yaxis = list(title = 'Count'), barmode = 'stack')
+  
+  html_page <- export_plotly(p)
+  
+  if(nrow(processed_data_full)==0){
+    processed_data_full<-NA
+  }
+  
+  return(html_page)
+  
+}
+

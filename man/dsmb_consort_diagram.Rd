@@ -7,22 +7,29 @@
 dsmb_consort_diagram(
   analytic,
   not_enrolled_other = NULL,
-  completed_str = "Completed 12-month visit"
+  completed_str = "Completed 12-month visit",
+  late_ineligible = "late_ineligible",
+  late_ineligible_str = "Late Ineligible",
+  not_expected_adjudicated = FALSE
 )
 }
 \arguments{
-\item{analytic}{This is the analytic data set that must include screened, eligible, 
-consented, randomized, enrolled, patient_status_active, censored, refused, late_ineligible, and the meta construct column}
+\item{analytic}{The analytic data set that must include the following columns: screened, eligible, consented, refused, discontinued_pre_randomization,
+randomized, late_ineligible, enrolled, completed, not_completed, not_expected, active, missed_final_followup}
 
-\item{not_enrolled_other}{is a meta construct that is NULL by default}
+\item{not_enrolled_other}{A column in the dataset for cases that are eligible but not enrolled for reasons other than refusal (optional).}
 
-\item{completed_str}{is the text for the completed box that defaults to 'Completed 12-month visit'}
+\item{completed_str}{A string specifying the label for the completion status box. Defaults to "Completed 12-month visit".}
+
+\item{late_inelgible}{defaults to late_ineligble but can be any construct like "adjudicated_discontinued"}
+
+\item{late_inelgible_str}{defaults to Late Ineligible but can be any construct like "Adjudicated Discontinued"}
 }
 \value{
-nothing
+An HTML string containing an image tag with the base64-encoded consort diagram in PNG format.
 }
 \description{
-This function visualizes the categorical percentages of baseline characteristics sex, age, race, education, and military
+This function visualizes the categorical percentages of Study Status for any study, similar to the NSAID consort diagram, but with customization endpoints.
 }
 \examples{
 \dontrun{
